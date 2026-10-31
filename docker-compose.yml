@@ -1,0 +1,57 @@
+services:
+  db_osticket:
+    image: mysql:8.0
+    container_name: db_osticket
+    restart: "no"
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.80'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    volumes:
+      - osticket_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}", "-e", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  osticket_web:
+    image: campbellsoftwaresolutions/osticket:latest
+    container_name: osticket_web
+    restart: "no"
+    ports:
+      - "8080:80"
+    environment:
+      MYSQL_HOST: db_osticket
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    depends_on:
+      db_osticket:
+        condition: service_healthy
+
+  auto_configurador:
+    image: mysql:8.0
+    container_name: auto_configurador
+    restart: "no"
+    depends_on:
+      - osticket_web
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      OSTICKET_ADMIN_USER: ${OSTICKET_ADMIN_USER}
+      OSTICKET_ADMIN_PASSWORD: ${OSTICKET_ADMIN_PASSWORD}
+    command: >
+      bash -c "sleep 40 && mysql -h db_osticket -u root -p\"$$MYSQL_ROOT_PASSWORD\" osticket_db -e \"UPDATE ost_staff SET username='$$OSTICKET_ADMIN_USER', passwd=MD5('$$OSTICKET_ADMIN_PASSWORD');\""
+
+volumes:
+  osticket_db_data:
